@@ -27,6 +27,9 @@ int make_dgram_server_socket(int PortNum,int QueueNum)
     saddr.sin_addr.s_addr=htons(INADDR_ANY);
     saddr.sin_port=htons(PortNum);//端口号
     saddr.sin_family=AF_INET;//地址族
+    int opt = 1;
+	/*setsockopt( sock_id, SOL_SOCKET,SO_REUSEADDR, 
+					(const void *)&opt, sizeof(opt) );*/
     if(bind(sock_id,(struct sockaddr*)&saddr,sizeof(saddr))!=0)//将sock与saddr绑定
     {
         oops("There is somthing wrong when server bind a sock\n",5);

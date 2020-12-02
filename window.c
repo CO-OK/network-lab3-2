@@ -18,3 +18,21 @@ int MakeServerWindow(struct ServerWindow* window,int n)
     window->next_seq_num=window->head; 
     return 0;
 }
+int find_next_pos(struct TimeTable* table)
+{
+    for(int i=0;i<time_table_num;i++)
+    {
+        if(table->table[i].valid==1)
+            return i;
+    }
+    return -1;
+}
+int TimeTableInsert(struct TimeTable* time_table,struct thread_item*item,int pos)
+{
+    time_table->table[pos].item=item;
+    time_table->table[pos].item->timer_stop=0;
+    time_table->table[pos].item->count=0;
+    time_table->table[pos].valid=0;
+    item->pos=pos;
+    return 0;
+}

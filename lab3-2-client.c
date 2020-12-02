@@ -69,8 +69,16 @@ int main(int ac,char*av[])
             make_pkg_num(buf_send,expect_num);
             Sendto(sock , buf_send, buf_len, 0, (struct sockaddr*)&saddr_to, saddrlen,ACK);
             printf("recv pkg %d,chars=%d\n",expect_num,nchars);
+            printf("send pkt %d\n",expect_num);
             expect_num++;
         }
+        /*else
+        {
+            printf("error recv pkg %d,chars=%d\n",expect_num,nchars);
+            make_pkg_num(buf_send,expect_num-1);
+            Sendto(sock , buf_send, buf_len, 0, (struct sockaddr*)&saddr_to, saddrlen,ACK);
+        }*/
+        
     }
     close(fd);
     return 0;
