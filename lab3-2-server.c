@@ -62,33 +62,33 @@ int main(int ac,char*av[])
     set_timer(1);
     while (1)
     {
-        int sock;
-        int port=find_next_port(ac-2);
-        printf("port: %d\n",port);
-        if((sock=make_dgram_server_socket(port,5))==-1)
-            oops("can not make socket",2);
-        struct thread_item* item=malloc(sizeof(struct thread_item));//创建一个新的线程结构体，方便传参
-        make_thread_item(item);//初始化该结构体
-        item->window=malloc(sizeof(struct ServerWindow));//初始化窗口
-        item->file_name=av[ac-1];//要打开的文件名
-        shake_hand((struct sockaddr*)item->saddr,item->saddrlen,sock);//握手
-        int pos=find_next_pos(&time_table); //找到时间表中一个合适的位置  
-        printf("pos:%d",pos);  
-        TimeTableInsert(&time_table,item,find_next_pos(&time_table));//将项目加入表项
-        item->sock=sock;
-        item->port=port;
-        pthread_t thread_send_t,thread_recv_t;
-        if((pthread_create(&thread_send_t,NULL,(void*)&thread_send,(void*)(item)))!=0)
+        int port;
+        if(find_next_pos(&time_table)!=-1&&(port=find_next_port(time_table_num))!=-1)
         {
-            oops("there is somthing wrong when create a new thread\n",1);
-        }
-        if((pthread_create(&thread_recv_t,NULL,(void*)&thread_recv,(void*)(item)))!=0)
-        {
-            oops("there is somthing wrong when create a new thread\n",1);
-        }
-        //pthread_join(thread_send_t,NULL);
-        //pthread_join(thread_recv_t,NULL); 
-        printf("done!\n");
+            int sock;
+            printf("port: %d\n",port);
+            if((sock=make_dgram_server_socket(port,1))==-1)
+                oops("can not make socket",2);
+            struct thread_item* item=malloc(sizeof(struct thread_item));//创建一个新的线程结构体，方便传参
+            make_thread_item(item);//初始化该结构体
+            item->window=malloc(sizeof(struct ServerWindow));//初始化窗口
+            item->file_name=av[ac-1];//要打开的文件名
+            item->sock=sock;
+            item->port=port;
+            item->shake_hand_done=0;
+            pthread_t thread_send_t,thread_recv_t;
+            if((pthread_create(&thread_send_t,NULL,(void*)&thread_send,(void*)(item)))!=0)
+            {
+                oops("there is somthing wrong when create a new thread\n",1);
+            }
+            if((pthread_create(&thread_recv_t,NULL,(void*)&thread_recv,(void*)(item)))!=0)
+            {
+                oops("there is somthing wrong when create a new thread\n",1);
+            }
+            //pthread_join(thread_send_t,NULL);
+            //pthread_join(thread_recv_t,NULL); 
+            printf("done!\n");
+        }  
     }
     return 0;
 }
@@ -135,7 +135,7 @@ int set_timer(int msecs)//毫秒
 
 void ALRM_handler()
 {
-    for(int i=0;i<100;i++)
+    for(int i=0;i<time_table_num;i++)
     {
         if(time_table.table[i].valid==0)
         {
@@ -164,10 +164,18 @@ void ALRM_handler()
 
 void thread_send(void *arg)
 {
+    
     int pkg_num=0;
     int nchars=0;
     struct thread_item* item=arg;
-    MakeServerWindow(item->window, 5);
+    
+    int pos=find_next_pos(&time_table); //找到时间表中一个合适的位置  
+    printf("pos:%d\n",pos);  
+    TimeTableInsert(&time_table,item,find_next_pos(&time_table));//将项目加入表项
+    MakeServerWindow(item->window, window_num);
+    shake_hand((struct sockaddr*)item->saddr,item->saddrlen,item->sock);//握手
+    item->shake_hand_done=1;
+    item->timer_stop=0;
     int fd=open(item->file_name,O_RDONLY); 
     printf("open\n");  
     while(1)
@@ -204,6 +212,7 @@ void thread_recv(void *arg)
     struct thread_item* item=arg;
     int nchars=0;
     unsigned char recv[buf_len];
+    while(!item->shake_hand_done);
     while(1)
     {
         nchars=recvfrom(item->sock,recv,buf_len,0,(struct sockaddr*)item->saddr,&(*item->saddrlen));
@@ -222,7 +231,20 @@ void thread_recv(void *arg)
     }
     //清除表项中相应位置
     time_table.table[item->pos].valid=1;
+    //关闭文件描述符
     close(time_table.table[item->pos].item->sock);
+    //释放端口
+    for(int i=0;i<time_table_num;i++)
+        if(port_list[i].port==item->port)
+            port_list[i].valid=1;
+    //释放线程资源
+    //窗口shifang
+    printf("delete window num=%d\n",DeleteWindow(item->window));
+    free(item->window);
+    printf("thread window deleted\n");
+    //删除线程参数结构体
+    free(item);
+    printf("one thread finished\n");
 }
 
 void say_goodbye()
@@ -247,8 +269,8 @@ int make_thread_item(struct thread_item* item)
 
 int CheckArg(int ac,char*av[])
 {
-    if(ac<=1)
-        oops("too few args\n",1);
+    if(ac!=2+time_table_num)
+        oops("args num error\n",1);
     /*for(int i=1;i<=ac-1;i++)
     {
         for(int j=0;j<strlen(av[i]);j++)

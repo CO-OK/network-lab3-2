@@ -2,7 +2,8 @@
 #include<sys/socket.h>
 #include<stdlib.h>
 #include<stdio.h>
-#define time_table_num 20
+#define time_table_num 4
+#define window_num 5
 struct WindowItem{
     unsigned char recv_buf[buf_len];
     unsigned char send_buf[buf_len];
@@ -18,7 +19,7 @@ struct ServerWindow{
     struct WindowItem* next_seq_num;
 };
 int MakeServerWindow(struct ServerWindow*  window,int n);
-
+int DeleteWindow(struct ServerWindow*  window);
 struct thread_item{
     socklen_t* saddrlen;
     struct ServerWindow *window;
@@ -29,6 +30,7 @@ struct thread_item{
     int pos;
     int sock;
     int port;
+    int shake_hand_done;
     //struct itimerval* time_set;
 };
 
