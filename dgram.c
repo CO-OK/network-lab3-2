@@ -79,10 +79,10 @@ void delay(unsigned i)
     for(int j=0;j<i;j++);
 }
 
-int check_sum( unsigned char* buf)
+int check_sum( unsigned char* buf,int len)
 {
     int sum=0;
-    for(int i=0;i<buf_len;i++)
+    for(int i=0;i<len;i++)
     {
         if(i!=1&&i!=2&&i!=3)
         {
@@ -98,10 +98,10 @@ int check_sum( unsigned char* buf)
     return 0;
 }
 
-int make_sum(unsigned char * buf)
+int make_sum(unsigned char * buf,int len)
 {
     int sum=0;
-    for(int i=0;i<buf_len;i++)
+    for(int i=0;i<len;i++)
     {
         //printf("%d\n",buf[i]);
         if(i!=1&&i!=2&&i!=3)
@@ -130,7 +130,7 @@ void make_hdr(unsigned char*buf,int PRO)
 int Sendto(int fd,  void *buf, size_t n, int flags, const struct sockaddr *addr, socklen_t addr_len,int PRO)
 {
     make_hdr(buf,PRO);
-    make_sum(buf);
+    make_sum(buf,n);
     return sendto(fd,buf,n,flags,addr,addr_len);
 }
 
@@ -189,7 +189,7 @@ int read_pkg_num(unsigned char* buf)
 int lab3_2_Sendto(int fd, size_t n, int flags, const struct sockaddr *addr, socklen_t addr_len,int PRO,struct WindowItem* item,int pkg_num)
 {
     make_hdr(item->send_buf,PRO);
-    make_sum(item->send_buf);
+    make_sum(item->send_buf,n);
     make_pkg_num(item->send_buf,pkg_num);
     item->pkg_num=pkg_num;
     item->pkg_size=n;

@@ -19,10 +19,10 @@ int check_hdr_FIN(char c);
 int make_dgram_server_socket(int PortNum,int QueueNum);
 int get_internet_address(char*,int,int*,struct sockaddr_in*);
 void say_who_called(struct sockaddr_in *);
-void shake_hand(struct sockaddr* saddr,socklen_t*saddrlen,int sock);
+void shake_hand(struct sockaddr* saddr,socklen_t*saddrlen,int sock,struct thread_item* item);
 void say_goodbye();
-int make_sum( unsigned char * buf);
-int check_sum(unsigned char* buf);
+int make_sum( unsigned char * buf,int len);
+int check_sum(unsigned char* buf,int len);
 int Sendto(int fd,  void *buf, size_t n, int flags, const struct sockaddr *addr, socklen_t addr_len,int PRO);
 void ALRM_handler();
 int set_timer(int n_msecs);
@@ -38,6 +38,7 @@ int read_pkg_num(unsigned char* buf);
 int make_thread_item(struct thread_item* item);
 int find_next_port(int len);
 struct SockPort* port_list;
+void delay(unsigned i);
 int main(int ac,char*av[])
 {
     
@@ -75,7 +76,7 @@ int main(int ac,char*av[])
             item->file_name=av[ac-1];//要打开的文件名
             item->sock=sock;
             item->port=port;
-            item->shake_hand_done=0;
+            item->shake_hand_done=-1;
             pthread_t thread_send_t,thread_recv_t;
             if((pthread_create(&thread_send_t,NULL,(void*)&thread_send,(void*)(item)))!=0)
             {
@@ -85,8 +86,6 @@ int main(int ac,char*av[])
             {
                 oops("there is somthing wrong when create a new thread\n",1);
             }
-            //pthread_join(thread_send_t,NULL);
-            //pthread_join(thread_recv_t,NULL); 
             printf("done!\n");
         }  
     }
@@ -96,7 +95,7 @@ int main(int ac,char*av[])
 
 
 
-void shake_hand(struct sockaddr* saddr,socklen_t*saddrlen,int sock)
+void shake_hand(struct sockaddr* saddr,socklen_t*saddrlen,int sock,struct thread_item* item)
 {
      //服务器端的握手
     unsigned char buf_send[buf_len];
@@ -107,14 +106,21 @@ void shake_hand(struct sockaddr* saddr,socklen_t*saddrlen,int sock)
         if(check_hdr_SYN(buf_recv[0]))
         {
             Sendto(sock,buf_send, buf_len, 0, saddr,*saddrlen,SYN|ACK);
+            //设置计时器
+            item->shake_hand_done=0;
             break;
         }
     }
     while(1)
     {
         recvfrom(sock,buf_recv,buf_len,0,saddr,&(*saddrlen));
-        if(check_hdr_ACK(buf_recv[0])&&check_sum(buf_recv))
+        if(check_hdr_ACK(buf_recv[0]))
+        //计时器失效
+        {
+            item->shake_hand_done=1;
             break;
+        }
+            
     }
     printf("server shake done\n");
 }
@@ -139,9 +145,8 @@ void ALRM_handler()
     {
         if(time_table.table[i].valid==0)
         {
-            //printf("table port %d\n",time_table.table[i].item->port);
             time_table.table[i].item->count++;//对所有表项进行计数
-            if(time_table.table[i].item->count==1000)//对到时的进行重发
+            if(time_table.table[i].item->count==1000&&time_table.table[i].item->shake_hand_done==1)//对到时的进行重发
             {
                 time_table.table[i].item->count=0;//重新计时
                 if(!time_table.table[i].item->timer_stop)
@@ -150,12 +155,31 @@ void ALRM_handler()
                     struct WindowItem*tmp=time_table.table[i].item->window->head;
                     while(tmp!=time_table.table[i].item->window->next_seq_num)
                     {
-                        //printf("resend %d\n",read_pkg_num(tmp->send_buf));
-                        lab3_2_Sendto(time_table.table[i].item->sock, tmp->pkg_size, 0, (struct sockaddr*)time_table.table[i].item->saddr,\
+                        if(time_table.table[i].valid==0)
+                        {
+                            printf("resend %d\n",read_pkg_num(tmp->send_buf));
+                            lab3_2_Sendto(time_table.table[i].item->sock, tmp->pkg_size, 0, (struct sockaddr*)time_table.table[i].item->saddr,\
                                             *time_table.table[i].item->saddrlen,tmp->send_buf[0],tmp,tmp->pkg_num);
-                        tmp=tmp->next;
+                            usleep(2000);
+                            tmp=tmp->next;
+                        }
+                        else
+                        {
+                            break;
+                        }
+                       
                     }
                 }
+            }
+            //若握手时出现丢包
+            else if(time_table.table[i].item->shake_hand_done==0&&time_table.table[i].item->count==3000)
+            {
+    
+                printf("shake_hand_done:%d\n",(time_table.table[i].item->shake_hand_done));
+                char buf_send[buf_len];
+                time_table.table[i].item->count=0;//重新计时
+                //重发
+                Sendto(time_table.table[i].item->sock,buf_send, buf_len, 0, (struct sockaddr*)time_table.table[i].item->saddr,*time_table.table[i].item->saddrlen,SYN|ACK);
             }
         }
     }
@@ -173,8 +197,8 @@ void thread_send(void *arg)
     printf("pos:%d\n",pos);  
     TimeTableInsert(&time_table,item,find_next_pos(&time_table));//将项目加入表项
     MakeServerWindow(item->window, window_num);
-    shake_hand((struct sockaddr*)item->saddr,item->saddrlen,item->sock);//握手
-    item->shake_hand_done=1;
+    shake_hand((struct sockaddr*)item->saddr,item->saddrlen,item->sock,item);//握手
+    //item->shake_hand_done=1;
     item->timer_stop=0;
     int fd=open(item->file_name,O_RDONLY); 
     printf("open\n");  
@@ -188,19 +212,18 @@ void thread_send(void *arg)
                 lab3_2_Sendto(item->sock, nchars+offset, 0, (struct sockaddr*)item->saddr,*item->saddrlen,END,item->window->next_seq_num,pkg_num);
                 printf("port %d send end pkg %d\n",item->port,pkg_num);
                 close(fd); 
-                //set_timer(500);
                 item->count=0;
                 item->window->next_seq_num=item->window->next_seq_num->next;
                 printf("port %d server send done\n",item->port);
                 break;
             }
             lab3_2_Sendto(item->sock, nchars+offset, 0, (struct sockaddr*)item->saddr,*item->saddrlen,ACK,item->window->next_seq_num,pkg_num);
+            usleep(2000);
             printf("port %d send pkg %d , len=%d\n",item->port,pkg_num,offset+nchars);
             pkg_num++;
             if(item->window->head==item->window->next_seq_num)
             {
                 item->count=0;
-                //set_timer(500);
             }      
             item->window->next_seq_num=item->window->next_seq_num->next;
         }
@@ -212,11 +235,11 @@ void thread_recv(void *arg)
     struct thread_item* item=arg;
     int nchars=0;
     unsigned char recv[buf_len];
-    while(!item->shake_hand_done);
+    while(item->shake_hand_done!=1);
     while(1)
     {
         nchars=recvfrom(item->sock,recv,buf_len,0,(struct sockaddr*)item->saddr,&(*item->saddrlen));
-        if(check_sum(recv)&&read_pkg_num(recv)==item->window->head->pkg_num)
+        if(check_sum(recv,nchars)&&read_pkg_num(recv)==item->window->head->pkg_num)
         {
             printf("port=%d recv pkg %d\n",item->port,read_pkg_num(recv));
             item->window->head=item->window->head->next;
