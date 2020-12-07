@@ -7,17 +7,17 @@
 
 #define CLR 0b00000000
 
-#ifndef offset
+#ifndef offset    //数据报除数据部分外的长度
 #define offset 8
 #endif
 
-#ifndef data_len
+#ifndef data_len  //数据长度
 #define data_len BUFSIZ
 #endif
-#ifndef oops
+#ifndef oops     //错误处理
 #define oops(m,x)   {perror(m)  ;exit(x)    ;}
 #endif
-#ifndef buf_len
+#ifndef buf_len  //整条信息的长度
 #define buf_len data_len+offset
 #endif
 
