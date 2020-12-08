@@ -200,7 +200,7 @@ void thread_send(void *arg)
     int pos=find_next_pos(&time_table); //找到时间表中一个合适的位置  
     printf("pos:%d\n",pos);  
     TimeTableInsert(&time_table,item,find_next_pos(&time_table));//将项目加入表项
-    MakeServerWindow(item->window, window_num);//初始化窗口
+    MakeServerWindow(item->window, 2);//初始化窗口
     shake_hand(item);//握手
     item->timer_stop=0;//先停止计时器
     int fd=open(item->file_name,O_RDONLY); //打开文件
